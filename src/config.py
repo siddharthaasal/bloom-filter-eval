@@ -12,6 +12,12 @@ SEED = 42  # Random seed for reproducibility
 # Zipfian Workload Settings
 ZIPF_ALPHAS = [1.0, 1.2, 1.5]  # Skew parameters to test
 
+# Adversarial Settings
+ADVERSARIAL_RATIO = 0.5  # Ratio of queries that are chosen False Positives
+
+# Temporal Settings
+TEMPORAL_PHASES = 3  # Number of phases in temporal workload
+
 # Paths
 RESULTS_DIR = "results"
 CSV_DIR = f"{RESULTS_DIR}/csv"
