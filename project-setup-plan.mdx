@@ -1,0 +1,197 @@
+# Minimal Project Setup Plan
+
+## Empirical Evaluation of Bloom Filter Variants Under Skewed Workloads
+
+---
+
+## 1. Goal
+
+Set up a lightweight, reproducible benchmarking project to compare commonly used probabilistic filters using existing libraries.
+
+The goal is **not** to build infrastructure, but to quickly generate:
+
+- false positive rate data
+- latency comparisons
+- memory usage comparisons
+
+sufficient for a research paper.
+
+---
+
+## 2. Scope (Intentionally Limited)
+
+Filters included:
+
+- Bloom Filter
+- Counting Bloom Filter
+- Scalable Bloom Filter
+- Cuckoo Filter
+
+Workloads included:
+
+- Uniform workload
+- Zipfian (skewed) workload
+
+Excluded for simplicity:
+
+- XOR filter
+- Cache-level analysis
+- Adversarial custom attacks
+- Native / C++ code
+
+This keeps setup simple and fully Python-based.
+
+---
+
+## 3. Tech Stack
+
+### Language
+
+- Python 3.10+
+
+### Libraries (All pip-installable)
+
+- numpy
+- pandas
+- matplotlib
+- scipy
+- pyperf
+- pybloom_live
+- cuckoofilter
+
+No custom data structures will be implemented.
+
+---
+
+## 4. Repository Structure
+
+```
+
+bloom-filter-bench/
+├── filters.py
+├── workloads.py
+├── benchmarks.py
+├── results/
+│ ├── csv/
+│ └── plots/
+├── config.py
+├── requirements.txt
+└── README.md
+
+```
+
+Single-file modules are preferred to reduce complexity.
+
+---
+
+## 5. Filter Usage
+
+### Bloom / Counting / Scalable Bloom
+
+Library: `pybloom_live`
+
+Used directly:
+
+- BloomFilter
+- CountingBloomFilter
+- ScalableBloomFilter
+
+Metrics collected:
+
+- false positive rate
+- insert time
+- query time
+- memory usage (estimated from parameters)
+
+---
+
+### Cuckoo Filter
+
+Library: `cuckoofilter`
+
+Used directly with default settings.
+
+Metrics collected:
+
+- false positive rate
+- insert time
+- query time
+- memory usage (reported by library)
+
+---
+
+## 6. Workload Generation (Data Source)
+
+All data is **synthetically generated**.
+
+### Uniform Workload
+
+- Random integer keys
+- Baseline comparison
+
+### Zipfian Workload
+
+- Generated using numpy Zipf distribution
+- Multiple skew levels (α = 1.0, 1.2, 1.5)
+
+Each workload produces:
+
+- insertion key list
+- query key list
+- known-negative query list (for FPR)
+
+No real-world datasets are required.
+
+---
+
+## 7. Benchmarks (Minimal Set)
+
+Benchmarks are combined into a single script.
+
+Metrics:
+
+- False positive rate
+- Average insert latency
+- Average query latency
+- Approximate memory usage (bits per key)
+
+Timing:
+
+- Use `pyperf` or `time.perf_counter()`
+- Multiple runs, averaged
+
+Results are saved as CSV files.
+
+---
+
+## 8. Configuration
+
+All parameters live in `config.py`:
+
+- number of keys
+- filter size / capacity
+- Zipf alpha
+- number of trials
+- random seed
+
+No hardcoded constants elsewhere.
+
+---
+
+## 9. Output for Paper
+
+Generated outputs:
+
+- CSV tables for all metrics
+- Line plots:
+  - FPR vs load factor
+  - Latency vs skew
+  - Memory vs accuracy
+
+These figures are sufficient for:
+
+- evaluation section
+- discussion section
+- limitations section
+
+---
