@@ -141,9 +141,9 @@ def run_trial(run_id, filter_cls, workload_func, workload_params):
             end_del = time.perf_counter()
             avg_delete_latency = ((end_del - start_del) / len(keys_to_delete)) * 1e6
     except NotImplementedError:
-        avg_delete_latency = -1  # Indicator for not supported
+        avg_delete_latency = None  # Indicator for not supported
     except Exception:
-        avg_delete_latency = -1
+        avg_delete_latency = None
 
     return {
         "RunID": run_id,
@@ -202,6 +202,12 @@ def run_temporal_trial(run_id, filter_cls, workload_func, workload_params):
             lats.append(time.perf_counter() - t0)
         p99_lat = np.percentile(lats, 99) * 1e6 if lats else 0
 
+        # FPR Calculation
+        true_negatives = phase_data.get("true_negatives", [])
+        fpr = 0.0
+        if len(true_negatives) > 0:
+            fpr = measure_fpr(f, true_negatives)
+
         results.append(
             {
                 "RunID": run_id,
@@ -211,8 +217,8 @@ def run_temporal_trial(run_id, filter_cls, workload_func, workload_params):
                 "InsertLatency(us)": insert_lat,
                 "QueryLatency(us)": query_lat,
                 "P99_QueryLatency(us)": p99_lat,
-                "DeleteLatency(us)": 0,  # Not focused in temporal yet
-                "FPR": 0,  # FPR difficult to define in shifting window without explicit true_neg set
+                "DeleteLatency(us)": None,  # Not focused in temporal yet
+                "FPR": fpr,
                 "BitsPerKey": f.size_bits()
                 / (len(insert_keys) * (phase + 1)),  # Rough approx
             }

@@ -27,11 +27,13 @@ def generate_uniform(num_keys=config.NUM_KEYS, seed=config.SEED):
     # For query_keys, we want a mix. Let's say 50% present, 50% absent.
     # But for FPR, we specifically want absent keys.
     # The benchmark can decide how to use them.
-    # Here we return a set of pure negatives for FPR calculation.
-    true_negatives = all_keys[num_keys : num_keys * 2]
+    # We return a set of pure negatives for FPR calculation.
+    # CRITICAL: We need MANY more negatives to measure low FPR accurately.
+    # Let's say 10x the number of inserted keys.
+    true_negatives = all_keys[num_keys : num_keys * 11]
 
     # Query set: same size as insert, random mix
-    query_pool = np.concatenate([insert_keys, true_negatives])
+    query_pool = np.concatenate([insert_keys, true_negatives[:num_keys]])
     query_keys = np.random.choice(query_pool, num_keys, replace=False)
 
     return insert_keys, query_keys, true_negatives
@@ -55,10 +57,11 @@ def generate_zipfian(num_keys=config.NUM_KEYS, alpha=1.0, seed=config.SEED):
 
     # Generate unique keys for insertion first (Uniformly distinctive)
     # We insert unique items, but QUERY them with skew.
-    pool_size = num_keys * 3
+    pool_size = num_keys * 15  # Need larger pool for 10x negatives
     all_keys = np.random.choice(range(pool_size * 10), pool_size, replace=False)
     insert_keys = all_keys[:num_keys]
-    true_negatives = all_keys[num_keys : num_keys * 2]
+    # 10x negatives
+    true_negatives = all_keys[num_keys : num_keys * 11]
 
     # Generate Zipfian indices to sample from the insert_keys
 
@@ -147,8 +150,10 @@ def generate_adversarial(
     np.random.shuffle(query_keys)
 
     # True negatives for FPR check: stick to standard random negatives
+    # True negatives for FPR check: stick to standard random negatives
+    # Need 10x for consistent measurement even in adversarial
     true_negatives = all_keys[
-        num_keys + len(false_positives) : num_keys * 2 + len(false_positives)
+        num_keys + len(false_positives) : num_keys * 11 + len(false_positives)
     ]
 
     return insert_keys, query_keys, true_negatives
@@ -199,8 +204,22 @@ def generate_temporal(num_keys=config.NUM_KEYS, seed=config.SEED, phases=3):
         zipf_indices = (zipf_vals - 1) % len(active_keys)
         query_keys = active_keys[zipf_indices]
 
+        # Generate True Negatives for FPR
+        # Using a range completely outside total_universe to guarantee no collisions
+        # We need a large number (e.g., 10x active set) for accurate FPR
+        num_negatives = len(active_keys) * 10
+        neg_start = (
+            total_universe + (i * num_negatives) + 1
+        )  # Offset per phase to keep fresh
+        true_negatives = np.arange(neg_start, neg_start + num_negatives)
+
         cycle_data.append(
-            {"phase": i, "insert_keys": active_keys, "query_keys": query_keys}
+            {
+                "phase": i,
+                "insert_keys": active_keys,
+                "query_keys": query_keys,
+                "true_negatives": true_negatives,
+            }
         )
 
     return cycle_data

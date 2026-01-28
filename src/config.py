@@ -3,8 +3,9 @@ Configuration parameters for the Bloom Filter Benchmarking project.
 """
 
 # Experiment Settings
-NUM_KEYS = 1000  # Number of keys to insert
-FILTER_CAPACITY = 100_000  # Designed capacity of the filters
+# Experiment Settings
+NUM_KEYS = 10000  # Number of keys to insert
+FILTER_CAPACITY = 20000  # Designed capacity (2x keys to handle temporal growth and avoid strict limit)
 ERROR_RATE = 0.01  # Target false positive rate (1%)
 NUM_TRIALS = 5  # Number of runs to average over
 SEED = 42  # Random seed for reproducibility

@@ -183,10 +183,70 @@ class CuckooFilterWrapper(BaseFilter):
     def size_bits(self):
         # This is strictly library dependent.
         # If not available, we return 0 or estimated.
-        # For now, let's try to access size in bytes * 8 if available.
+        # For cuckoofilter (python), `size` is a method returning num items.
+        # Repr shows `capacity` (buckets).
+        # Standard cuckoo: 4 slots per bucket, 8 bit fingerprint?
+        # Let's try to infer from capacity if available.
         try:
-            return self.filter.size * 8
-        except:
-            # Basic theoretical Cuckoo estimate: ~8-12 bits per item?
-            # We can't know for sure without internal access.
+            # 1. Try to get actual structure details
+            # Most Cuckoo implementations: 4 buckets per index
+            # .capacity usually returns number of buckets
+
+            buckets = getattr(self.filter, "capacity", None)
+            if callable(buckets):
+                buckets = buckets()
+
+            # Fingerprint size in bytes
+            fingerprint_size = getattr(self.filter, "fingerprint_size", 1)
+            bucket_size = getattr(self.filter, "bucket_size", 4)
+
+            if buckets is not None:
+                # Total bits = Buckets * EntriesPerBucket * FingerprintBits
+                # + some overhead for the table structure itself, but raw payload is key
+                return buckets * bucket_size * (fingerprint_size * 8)
+
+        except Exception:
+            pass
+
+        # 2. Fallback: Theoretical Estimate
+        # bits_per_key = fingerprint_bits / load_factor
+        # fingerprint_bits (f) >= ceil(log2(1/error_rate) + 3)
+        # load_factor (alpha) ≈ 0.95 (standard cuckoo max load)
+
+        try:
+            # Theoretical fingerprint bits needed for this error rate
+            # f = log2(1/epsilon) + 2 or 3. Let's use conservative estimate.
+            # Python's cuckoofilter defaults to 1 byte (8 bits) usually if not specified,
+            # which supports up to ~0.03 error rate.
+            # But let's calculate what SHOULD be used.
+
+            # If we know the capacity count passed in:
+            n = self.capacity
+
+            # Check what fingerprint size implies
+            # If library uses 1 byte (8 bits), that's fixed.
+            fingerprint_bits = 8  # Default for many impls
+
+            # Adjust if error rate is very low (needs more bits)
+            # 2 * epsilon = 1/2^f  => f = log2(2/epsilon)
+            estimated_f = math.ceil(math.log2(1.0 / self.error_rate) + 3)
+            if estimated_f > 8:
+                fingerprint_bits = estimated_f
+
+            # Cuckoo Filters essentially have a capacity of N slots.
+            # Size = Capacity * (FingerprintBits) / LoadFactor?
+            # Actually Fixed Size = CapacityInSlots * FingerprintBits.
+            # But 'Capacity' arg is usually max items.
+            # Implementation rounds up to power of 2 buckets.
+
+            # Let's estimate:
+            # Tables usually power of 2 buckets.
+            # slots = n / 0.95 (load factor)
+
+            load_factor = 0.95
+            slots_needed = n / load_factor
+
+            return slots_needed * fingerprint_bits
+
+        except Exception:
             return 0
