@@ -1,127 +1,271 @@
-# Empirical Evaluation of Bloom Filter Variants: Research Paper Guide
+# Empirical Evaluation of Bloom Filter Variants
 
-This document outlines the strategy, methodology, and narrative structure for your research paper, based on the benchmarking suite we have built.
+## Under Skewed, Adversarial, and Temporal Workloads
 
 ---
 
 ## 1. Research Objective
 
-**Title**: _Empirical Evaluation of Bloom Filter Variants Under Skewed, Adversarial, and Temporal Workloads_
+### Title
 
-**Core Question**: How do different probabilistic filter implementations—Standard, Counting, Scalable, and Cuckoo—behave under _realistic_ (non-uniform) and _adversarial_ conditions?
+**_Empirical Evaluation of Bloom Filter Variants Under Skewed, Adversarial, and Temporal Workloads_**
 
-**Hypothesis**:
+### Core Research Question
 
-1.  **Skew (Zipfian)**: Filters with locality (like Cuckoo or Blocked BF) should benefit from skewed workloads due to CPU cache hits, whereas Standard BFs will show little improvement.
-2.  **Adversarial**: Query performance will degrade significantly when attacking False Positives due to consistent collision resolution paths.
-3.  **Temporal**: Long-running filters (Scalable/Counting) may fragment or degrade over time compared to fixed-capacity filters receiving batch rebuilds.
+How do different probabilistic membership filter implementations—**Standard Bloom**, **Counting Bloom**, **Scalable Bloom**, and **Cuckoo Filters**—behave under **realistic, non-uniform**, and **adversarial** workloads?
+
+### Hypotheses
+
+1. **Skewed Access (Zipfian)**  
+   Filters with data locality (e.g., Cuckoo Filters or blocked Bloom variants) should benefit from skewed access patterns due to improved CPU cache utilization, whereas standard Bloom filters will exhibit little change.
+
+2. **Adversarial Queries**  
+   Query performance will degrade under adversarial workloads that target false positives, as these queries consistently trigger worst-case collision resolution paths.
+
+3. **Temporal Dynamics**  
+   Long-running, dynamically growing filters (Counting and Scalable Bloom Filters) may degrade over time due to fragmentation or layered growth, compared to fixed-capacity filters that rely on periodic rebuilds.
 
 ---
 
 ## 2. Methodology & Experimental Design
 
-### A. The Contenders (Independent Variable 1)
+### A. Filter Implementations
 
-| Filter Type               | Implementation Strategy      | Key Characteristic | Trade-off                                               |
-| :------------------------ | :--------------------------- | :----------------- | :------------------------------------------------------ |
-| **Standard Bloom Filter** | `pybloom_live` (Bitarray)    | Simple $k$ hashes. | No deletion, fixed size.                                |
-| **Counting Bloom Filter** | **Custom** (8-bit counters)  | Array of counters. | Supports delete, $8\times$ memory usage.                |
-| **Scalable Bloom Filter** | `pybloom_live` (Layered)     | Stack of SBFs.     | Grows indefinitely, slower query (checks all layers).   |
-| **Cuckoo Filter**         | `cuckoofilter` (Fingerprint) | 2+ Hash buckets.   | Supports delete, high compactness, varying insert time. |
+_Independent Variable 1_
 
-### B. The Workloads (Independent Variable 2)
+| Filter Type               | Implementation Strategy       | Key Characteristic       | Primary Trade-off         |
+| ------------------------- | ----------------------------- | ------------------------ | ------------------------- |
+| **Standard Bloom Filter** | `pybloom_live` (bitarray)     | Fixed-size, \(k\) hashes | No deletion               |
+| **Counting Bloom Filter** | Custom (8-bit counters)       | Supports deletion        | \( \sim 8\times \) memory |
+| **Scalable Bloom Filter** | `pybloom_live` (layered)      | Grows dynamically        | Slower queries            |
+| **Cuckoo Filter**         | `cuckoofilter` (fingerprints) | Compact, deletable       | Variable insert cost      |
 
-We reject the "Uniform Random Only" standard of basic tutorials. Your paper focuses on **Realism**:
-
-1.  **Uniform (Baseline)**: Control group. Random integers.
-2.  **Zipfian (Skewed)**:
-    - _Why_: Real traffic follows Power Laws (80/20 rule).
-    - _Parameter_: $\alpha \in \{1.0, 1.2, 1.5\}$. Higher $\alpha$ = more skew (more "hot" keys).
-    - _Expected Outcome_: Measuring if "hot" keys stay in L1/L2 cache, improving $P99$ latency.
-3.  **Adversarial (Security)**:
-    - _Why_: DDoS prevention often uses filters. Attackers mine False Positives to bypass filters.
-    - _Strategy_: Mine keys that trigger `True` (False Positives) and replay them.
-    - _Metric_: Does the filter panic? (Cuckoo might loop, Scalable might check all layers).
-4.  **Temporal (Stability)**:
-    - _Why_: Data isn't static. Hot sets shift over time.
-    - _Strategy_: 3 Phases of shifting "Active Sets".
-    - _Metric_: Efficiency over time.
-
-### C. The Metrics (Dependent Variables)
-
-1.  **Metric 1: False Positive Rate (FPR)**
-    - _Goal_: Accuracy.
-    - _Target_: Configured for $1\%$. Does it hold under skew? (Yes, usually, but Cuckoo can fill up).
-2.  **Metric 2: Latency ($\mu$s)**
-    - _Insert_: Cost of ingestion.
-    - _Query (Avg)_: Throughput.
-    - _Query (P99)_: **Crucial for Systems**. The "Tail Latency". Indicates cache misses or worst-case collision chains.
-    - _Delete_: Maintenance cost (only for Counting/Cuckoo).
-3.  **Metric 3: Memory Efficiency**
-    - _Bits per Key_: Storage cost.
-    - _Analysis_: Compare Custom Counting BF (heavy) vs Cuckoo (light).
+**Implementation Note**  
+The Counting Bloom Filter is implemented using **8-bit counters** to guarantee correctness under heavy deletion workloads. While memory-expensive, this avoids overflow issues associated with 4-bit optimizations.
 
 ---
 
-## 3. Paper Structure (Proposed Outcome)
+### B. Workload Models
 
-### I. Abstract
+_Independent Variable 2_
 
-> "Probabilistic data structures are fundamental to modern systems... standard evaluations assume uniform distribution... this paper evaluates performance under realistic conditions..."
+This study explicitly rejects the assumption that **uniform random access** sufficiently models real systems.
 
-### II. Introduction
+#### 1. Uniform (Baseline)
 
-- Define the problem: Big Data requires approximate membership.
-- The Gap: Most comparisons ignore that _access patterns are rarely uniform_.
-- Your Contribution: A study of Skew, Adversarial, and Deletion costs.
-
-### III. System Model (The Algorithms)
-
-- Briefly explain the math of BF ($k$ hashes) vs Cuckoo (Fingerprints + partial relocations).
-- **Implementation Note**: Explicitly mention using a _Custom Counting Bloom Filter_ with 8-bit counters (safe but expensive) vs standard 4-bit optimizations.
-
-### IV. Evaluation (The "Meat")
-
-_Use the CSV data in `src/results/` to generate these plots._
-
-- **Exp 1: The Skew Effect**
-  - _Graph_: X-axis = Zipf Alpha, Y-axis = P99 Latency.
-  - _Analysis_: Does `StandardBloom` stay flat? Does `Cuckoo` get faster?
-- **Exp 2: The Attack**
-  - _Graph_: Bar chart of Query Latency (Uniform vs Adversarial).
-  - _Analysis_: How much slower is querying a False Positive compared to a True Negative? (Usually slower because it checks _all_ bit positions/buckets).
-- **Exp 3: Scalability Cost**
-  - Compare `Standard` vs `Scalable`. Show the latency penalty paid for the ability to grow.
-
-### V. Discussion & Guidelines
-
-- **When to use Cuckoo**: High performance reads, need deletion, memory is tight.
-- **When to use Counting**: Simplicity, heavy deletions, memory is abundant.
-- **When to use Scalable**: Unknown dataset size (Zero-config).
-- **Security**: Warning about algorithmic complexity attacks on filters.
-
-### VI. Conclusion
-
-- Summary of findings.
-- "No one size fits all".
+- Random integer keys
+- Serves as a control group
 
 ---
 
-## 4. Technical Nuances to Highlight
+#### 2. Zipfian (Skewed)
 
-1.  **The "Cache-Proxy" Metric**:
-    - We cannot easily count L1 cache misses in Python.
-    - _However_, `P99_QueryLatency` acts as a proxy. If P99 spikes, it effectively means we are fetching from main memory (RAM) instead of Cache.
-    - Use this argument to discuss "Hardware-efficiency".
-2.  **Implementation Bounds**:
-    - Acknowledge that Python adds overhead. The _relative_ differences between filters matter more than absolute nanoseconds.
-3.  **Adversarial Mining**:
-    - Note that finding FPs becomes harder as $m/n$ increases. Secure systems should rotate hash seeds.
+- **Motivation**: Real workloads follow power-law distributions (e.g., 80/20 rule)
+- **Distribution**: Zipfian
+- **Parameter**:  
+  \[
+  \alpha \in \{1.0, 1.2, 1.5\}
+  \]
+- Higher \( \alpha \) ⇒ greater skew
+- **Expected Outcome**: Improved cache locality for hot keys, reflected in lower P99 latency
 
 ---
 
-## 5. Next Steps for You
+#### 3. Adversarial (Security-Oriented)
 
-1.  **Generate Data**: Increase `NUM_KEYS` to 100k or 1M in `config.py` and run a full benchmark overnight.
-2.  **Plotting**: Use `matplotlib` to verify the hypotheses above.
-3.  **Drafting**: Start filling in Section III (System Model) while the benchmarks run.
+- **Motivation**: Probabilistic filters are commonly deployed in DDoS mitigation and abuse prevention systems
+- **Attack Strategy**:
+  - **Mining Phase**:  
+    A shadow filter is trained offline
+  - Keys are brute-forced until a large set of **false positives** is discovered
+- **Query Workload**:
+  - Dominated by mined false positives
+  - Mixed with valid queries
+- **Goal**:
+  - Measure worst-case query behavior
+  - Observe whether filters degrade catastrophically (e.g., repeated relocations in Cuckoo Filters or full-layer traversal in Scalable Bloom Filters)
+
+---
+
+#### 4. Temporal (Stability Over Time)
+
+- **Motivation**: Real datasets evolve; hot keys shift
+- **Design**:
+  - Three sequential phases
+  - Each phase activates a new working set
+- **Metrics**:
+  - Memory efficiency
+  - False positive rate
+  - Latency stability
+
+##### Correctness Detail: Disjoint Negative Universe
+
+Naïvely sampling random integers for false-positive measurement risks selecting keys that may be inserted in a future phase.
+
+**Solution**:  
+True negatives are drawn from a key range **strictly disjoint** from the entire universe of all phases.
+
+This guarantees:
+
+\[
+\text{FPR} = \frac{\text{False Positives}}{\text{Total Disjoint Negatives}}
+\]
+
+is mathematically sound.
+
+---
+
+## 3. Evaluation Metrics
+
+_Dependent Variables_
+
+### 1. False Positive Rate (FPR)
+
+- **Goal**: Accuracy under non-uniform workloads
+- **Methodology**:
+  - Query workload ≠ FPR measurement set
+  - True negatives are guaranteed non-members
+- **Formula**:
+  \[
+  \text{FPR} = \frac{\lvert \{k \mid k \in \text{Filter} \land k \in \text{TrueNegatives} \} \rvert}{\lvert \text{TrueNegatives} \rvert}
+  \]
+- **Target Configuration**: \( \approx 1\% \)
+
+---
+
+### 2. Latency (µs)
+
+- **Insert Latency**: Cost of ingestion
+- **Query Latency (Mean)**: Throughput
+- **Query Latency (P99)**:
+  - Primary systems metric
+  - Indicates cache misses or worst-case collision behavior
+- **Delete Latency**:
+  - Measured for Counting Bloom and Cuckoo Filters
+
+---
+
+### 3. Memory Efficiency (Bits Per Key)
+
+- **Bloom Variants**:
+  - Calculated from allocated bitarray size
+- **Cuckoo Filter**:
+  - Uses **runtime introspection**
+  - Capacity and fingerprint size queried directly from the library
+  - Avoids reliance on purely theoretical formulas
+
+**Observation**  
+Cuckoo filters round table sizes to powers of two, resulting in step-function memory behavior—an important real-world nuance often omitted in analytical models.
+
+---
+
+## 4. Experimental Results Structure
+
+_All plots are generated from CSV outputs in `src/results/`._
+
+### Experiment 1: Impact of Skew
+
+- **X-axis**: Zipf \( \alpha \)
+- **Y-axis**: P99 Query Latency
+- **Question**:
+  - Do locality-aware filters benefit from skew?
+  - Does Standard Bloom remain flat?
+
+---
+
+### Experiment 2: Adversarial Stress Test
+
+- **Comparison**:
+  - Uniform vs Adversarial queries
+- **Metric**:
+  - Query latency
+- **Insight**:
+  - False positives often require checking _all_ hash positions or buckets
+
+---
+
+### Experiment 3: Scalability Cost
+
+- **Comparison**:
+  - Standard Bloom vs Scalable Bloom
+- **Focus**:
+  - Latency penalty incurred for zero-configuration growth
+
+---
+
+## 5. Discussion & Practical Guidelines
+
+### Filter Selection
+
+- **Cuckoo Filter**
+  - High read performance
+  - Supports deletion
+  - Best when memory is constrained
+- **Counting Bloom Filter**
+  - Simple semantics
+  - Heavy deletions
+  - Memory-rich environments
+- **Scalable Bloom Filter**
+  - Unknown dataset size
+  - Acceptable latency overhead
+- **Standard Bloom Filter**
+  - Static datasets
+  - Predictable performance
+
+---
+
+### Security Considerations
+
+- Probabilistic filters are vulnerable to **algorithmic complexity attacks**
+- Mitigations:
+  - Hash seed rotation
+  - Periodic filter rebuilds
+  - Rate-limiting suspicious queries
+
+---
+
+## 6. Technical Nuances
+
+### Cache-Proxy Interpretation
+
+Direct cache-miss measurement is infeasible in Python.  
+Instead, **P99 query latency** serves as a proxy:
+
+- Stable P99 ⇒ cache-resident access
+- Spikes ⇒ main memory fetch or collision amplification
+
+---
+
+### Implementation Boundaries
+
+- Python introduces absolute overhead
+- The evaluation focuses on **relative performance trends**, not nanosecond-level precision
+
+---
+
+### Adversarial Mining Cost
+
+- Mining false positives becomes increasingly difficult as \( m/n \) grows
+- Reinforces the importance of over-provisioning and hash randomization
+
+---
+
+## 7. Conclusion
+
+This study demonstrates that probabilistic filters behave very differently under realistic workloads:
+
+- Uniform benchmarks hide critical behaviors
+- Skew reveals cache locality effects
+- Adversarial inputs expose worst-case paths
+- Temporal workloads highlight long-term stability trade-offs
+
+**No single filter dominates**.  
+Correct selection depends on workload shape, memory constraints, and security requirements.
+
+---
+
+## 8. Next Steps
+
+1. Increase `NUM_KEYS` to \(10^5\)–\(10^6\) and run overnight benchmarks
+2. Generate plots using `matplotlib`
+3. Draft the **System Model** section while experiments execute
