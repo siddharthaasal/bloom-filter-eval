@@ -124,18 +124,76 @@ def plot_adversarial_impact(df):
     plt.savefig(os.path.join(PLOTS_DIR, 'adversarial_fpr_impact.png'))
     plt.close()
 
-def main():
-    if not os.path.exists(PLOTS_DIR):
-        os.makedirs(PLOTS_DIR)
-        print(f"Created directory: {PLOTS_DIR}")
+def plot_adversarial_latency_comparison(df):
+    """Generates grouped bar chart for P99 Query Latency: Uniform vs Adversarial."""
+    print("Generating adversarial latency plots...")
+    
+    # Filter for Adversarial and Uniform
+    adv_df = df[df['Workload'] == 'generate_adversarial'].copy()
+    uni_df = df[df['Workload'] == 'generate_uniform'].copy()
+    
+    if adv_df.empty or uni_df.empty:
+        print("Insufficient data for adversarial latency comparison.")
+        return
 
-    df = load_and_preprocess_data(CSV_PATH)
+    # Create a comparative DataFrame
+    uni_df['Condition'] = 'Uniform'
+    adv_df['Condition'] = 'Adversarial'
+    
+    combined_df = pd.concat([uni_df, adv_df])
+
+    plt.figure(figsize=(9, 6))
+    sns.barplot(data=combined_df, x='Filter', y='P99_QueryLatency(us)', hue='Condition')
+    plt.title('P99 Query Latency: Uniform vs Adversarial Workload', fontsize=12, fontweight='bold')
+    plt.ylabel('P99 Query Latency (µs)')
+    plt.yscale('log')
+    plt.grid(axis='y', linestyle='--', alpha=0.7, which='both')
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, 'adversarial_p99_latency.png'))
+    plt.close()
+
+def plot_skew_p99_latency(df):
+    """Generates line chart for Impact of Data Skew: P99 Query Latency."""
+    print("Generating skew P99 latency plots...")
+    zipf_df = df[df['Workload'] == 'generate_zipfian'].copy()
+    
+    if zipf_df.empty:
+        print("No zipfian workload data found.")
+        return
+
+    # Ensure Alpha is numeric
+    zipf_df['Alpha'] = pd.to_numeric(zipf_df['Alpha'])
+
+    plt.figure(figsize=(10, 5))
+    sns.lineplot(data=zipf_df, x='Alpha', y='P99_QueryLatency(us)', hue='Filter', style='Filter', markers=True, dashes=False)
+    plt.title('Impact of Data Skew: P99 Query Latency', fontsize=12, fontweight='bold')
+    plt.xlabel('Zipfian Parameter (Alpha)')
+    plt.ylabel('P99 Query Latency (µs)')
+    plt.yscale('log')
+    
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', title='Filter', frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.7, which='both')
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, 'skew_p99_latency.png'))
+    plt.close()
+
+def generate_plots(csv_path=CSV_PATH, output_dir=PLOTS_DIR):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created directory: {output_dir}")
+
+    df = load_and_preprocess_data(csv_path)
     
     if df is not None:
         plot_baseline_comparison(df)
         plot_skew_impact(df)
         plot_adversarial_impact(df)
-        print(f"\nAll plots generated in: {os.path.abspath(PLOTS_DIR)}")
+        plot_adversarial_latency_comparison(df)
+        plot_skew_p99_latency(df)
+        print(f"\nAll plots generated in: {os.path.abspath(output_dir)}")
+
+def main():
+    generate_plots()
 
 if __name__ == "__main__":
     main()
